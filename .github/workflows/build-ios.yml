@@ -14,12 +14,15 @@ jobs:
           submodules: recursive
           fetch-depth: 0
 
+      - name: Setup Bazel
+        uses: bazelbuild/setup-bazelisk@v3
+
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '9.0.x'
 
-      - name: Install Workloads
+      - name: Install .NET Workloads
         run: |
           dotnet workload install maui-ios ios
 
@@ -27,7 +30,7 @@ jobs:
         run: |
           dotnet restore OpenUtauMobile/OpenUtauMobile.csproj -f net9.0-ios
 
-      - name: Publish & Create IPA
+      - name: Build and Package iOS IPA
         run: |
           dotnet publish OpenUtauMobile/OpenUtauMobile.csproj \
             -f net9.0-ios \
@@ -39,7 +42,7 @@ jobs:
             -p:TreatWarningsAsErrors=false \
             -p:MSBuildWarningsAsMessages="CS0108;CS8632;CS8600;CS8602;CS8603;CS8604;CS8618;CS8622"
 
-      - name: Package Payload to IPA (Fallback Packaging)
+      - name: Package Payload (Fallback if IPA generation is un-signed)
         run: |
           mkdir -p Payload
           APP_PATH=$(find OpenUtauMobile/bin/Release/net9.0-ios -name "*.app" -type d | head -n 1)
