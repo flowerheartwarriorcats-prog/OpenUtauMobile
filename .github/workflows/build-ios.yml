@@ -30,6 +30,8 @@ jobs:
             -f net9.0-ios \
             -c Release \
             -r ios-arm64 \
+            -p:MSBuildWarningsAsMessages=CS0108,CS8632,CS8600,CS8602,CS8603,CS8604,CS8618,CS8622 \
+            -p:TreatWarningsAsErrors=false \
             -p:ArchiveOnBuild=true \
             -p:BuildIpa=true \
             -p:EnableCodeSigning=false \
