@@ -13,42 +13,61 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Setup .NET (No Cache)
+      - name: Setup .NET SDK
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '9.0.x'
-          cache: false
 
-      - name: Install Workloads
-        run: dotnet workload install ios maui-ios
+      - name: Install MAUI iOS Workload
+        run: dotnet workload install maui-ios
 
-      - name: Restore Dependencies
-        run: dotnet restore OpenUtauMobile/OpenUtauMobile.csproj -f net9.0-ios
+      - name: Create Self-Signed Ad-Hoc Certificate for Runner
+        run: |
+          # Create a temporary keychain and generate a dummy self-signed signing identity
+          security create-keychain -p "" build.keychain
+          security default-keychain -s build.keychain
+          security unlock-keychain -p "" build.keychain
+          security create-db -p "" build.keychain
+          
+          # Generate a self-signed identity so .NET / Xcode doesn't fail on missing codesign key
+          openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+            -keyout ios_dummy.key -out ios_dummy.crt \
+            -subj "/CN=iPhone Developer: GitHub Actions (Dummy)"
+          openssl pkcs12 -export -out ios_dummy.p12 -inkey ios_dummy.key -in ios_dummy.crt -passout pass:dummy
+          
+          security import ios_dummy.p12 -k build.keychain -P "dummy" -A
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "" build.keychain
 
-      - name: Build and Publish IPA
+      - name: Restore Project Dependencies
+        run: dotnet restore -p:TargetFramework=net9.0-ios
+
+      - name: Build & Package OpenUtauMobile IPA
         run: |
           dotnet publish OpenUtauMobile/OpenUtauMobile.csproj \
             -f net9.0-ios \
             -c Debug \
-            -r ios-arm64 \
             -p:ArchiveOnBuild=true \
-            -p:BuildIpa=true \
-            -p:EnableCodeSigning=false \
-            -p:TreatWarningsAsErrors=false
+            -p:RuntimeIdentifier=ios-arm64 \
+            -p:TargetFrameworks=net9.0-ios \
+            -p:CodesignKey="iPhone Developer: GitHub Actions (Dummy)" \
+            -p:CodesignProvision=""
 
-      - name: Fallback Packaging (if .app built instead of .ipa)
+      - name: Package App Bundle into IPA (Fallback Packaging)
         run: |
-          if [ ! -f *.ipa ]; then
+          # Check if .ipa exists in the expected output folder; if not, package the .app manually
+          IPA_FILE=$(find OpenUtauMobile/bin/Debug/net9.0-ios/ios-arm64 -name "*.ipa" | head -n 1)
+          if [ -z "$IPA_FILE" ]; then
+            echo "Packaging .app folder into OpenUtauMobile.ipa..."
+            APP_PATH=$(find OpenUtauMobile/bin/Debug/net9.0-ios/ios-arm64 -name "*.app" -type d | head -n 1)
             mkdir -p Payload
-            APP_PATH=$(find OpenUtauMobile/bin/Debug/net9.0-ios -name "*.app" -type d | head -n 1)
-            if [ -n "$APP_PATH" ]; then
-              cp -r "$APP_PATH" Payload/
-              zip -r OpenUtauMobile-Debug.ipa Payload
-            fi
+            cp -r "$APP_PATH" Payload/
+            zip -r OpenUtauMobile-Debug.ipa Payload
+          else
+            cp "$IPA_FILE" OpenUtauMobile-Debug.ipa
           fi
 
       - name: Upload IPA Artifact
         uses: actions/upload-artifact@v4
         with:
           name: OpenUtauMobile-IPA
-          path: '**/*.ipa'
+          path: '*.ipa'
