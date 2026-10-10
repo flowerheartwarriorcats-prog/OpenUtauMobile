@@ -18,23 +18,33 @@ jobs:
         with:
           dotnet-version: '9.0.x'
 
-      - name: Install Workloads
-        run: dotnet workload install maui-ios ios
+      - name: Install All Required Workloads
+        run: |
+          dotnet workload install ios maui-ios android maui-android
 
       - name: Restore Project
-        run: dotnet restore OpenUtauMobile/OpenUtauMobile.csproj -p:TargetFramework=net9.0-ios
+        run: |
+          dotnet restore OpenUtauMobile/OpenUtauMobile.csproj
 
       - name: Build iOS Package
         run: |
-          dotnet publish OpenUtauMobile/OpenUtauMobile.csproj -f net9.0-ios -c Release -r ios-arm64 -p:BuildIpa=true -p:ArchiveOnBuild=true -p:EnableCodeSigning=false -p:TreatWarningsAsErrors=false
+          dotnet publish OpenUtauMobile/OpenUtauMobile.csproj \
+            -f net9.0-ios \
+            -c Release \
+            -r ios-arm64 \
+            -p:BuildIpa=true \
+            -p:ArchiveOnBuild=true \
+            -p:EnableCodeSigning=false \
+            -p:TreatWarningsAsErrors=false \
+            -p:MSBuildWarningsAsMessages="CS0108;CS8632;CS8600;CS8602;CS8603;CS8604;CS8618;CS8622"
 
-      - name: Package Payload to IPA
+      - name: Package Payload into IPA
         run: |
           mkdir -p Payload
           APP_PATH=$(find OpenUtauMobile/bin/Release/net9.0-ios -name "*.app" -type d | head -n 1)
           if [ -n "$APP_PATH" ]; then
             cp -r "$APP_PATH" Payload/
-            zip -r OpenUtauMobile.ipa Payload
+            zip -r OpenUtauMobile-Release.ipa Payload
           fi
 
       - name: Upload IPA Artifact
