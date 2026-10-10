@@ -1,0 +1,39 @@
+name: Build iOS IPA
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-ios:
+    runs-on: macos-14
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Install MAUI iOS Workloads
+        run: dotnet workload install maui-ios maui-android
+
+      - name: Restore Dependencies
+        run: dotnet restore -p:TargetFramework=net9.0-ios
+
+      - name: Build and Package iOS IPA
+        run: |
+          dotnet publish OpenUtauMobile/OpenUtauMobile.csproj \
+            -f net9.0-ios \
+            -c Release \
+            -p:ArchiveOnBuild=true \
+            -p:RuntimeIdentifier=ios-arm64 \
+            -p:TargetFrameworks=net9.0-ios \
+            -p:BuildIpa=true
+
+      - name: Upload IPA Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: OpenUtauMobile-IPA
+          path: '**/*.ipa'
