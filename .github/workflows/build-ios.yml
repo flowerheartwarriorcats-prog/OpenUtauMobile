@@ -8,43 +8,64 @@ jobs:
     runs-on: macos-14
 
     steps:
-      - name: Checkout Code
+      - name: Checkout Code & Submodules
         uses: actions/checkout@v4
         with:
           submodules: recursive
+          fetch-depth: 0
+
+      - name: Setup Bazel
+        uses: bazelbuild/setup-bazelisk@v3
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '9.0.x'
+          cache: false
 
-      - name: Install All Required Workloads
+      - name: Install All Workloads
         run: |
           dotnet workload install ios maui-ios android maui-android
 
-      - name: Restore Project
+      - name: Setup Dummy Signing Certificate
+        run: |
+          security create-keychain -p "" build.keychain
+          security default-keychain -s build.keychain
+          security unlock-keychain -p "" build.keychain
+          security create-db -p "" build.keychain
+          openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+            -keyout ios_dummy.key -out ios_dummy.crt \
+            -subj "/CN=iPhone Developer: GitHub Actions (Dummy)"
+          openssl pkcs12 -export -out ios_dummy.p12 -inkey ios_dummy.key -in ios_dummy.crt -passout pass:dummy
+          security import ios_dummy.p12 -k build.keychain -P "dummy" -A
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "" build.keychain
+
+      - name: Restore Dependencies
         run: |
           dotnet restore OpenUtauMobile/OpenUtauMobile.csproj
 
-      - name: Build iOS Package
+      - name: Build Native Backends & Publish iOS Package
         run: |
           dotnet publish OpenUtauMobile/OpenUtauMobile.csproj \
             -f net9.0-ios \
             -c Release \
             -r ios-arm64 \
-            -p:BuildIpa=true \
             -p:ArchiveOnBuild=true \
-            -p:EnableCodeSigning=false \
+            -p:BuildIpa=true \
+            -p:CodesignKey="iPhone Developer: GitHub Actions (Dummy)" \
+            -p:CodesignProvision="" \
             -p:TreatWarningsAsErrors=false \
             -p:MSBuildWarningsAsMessages="CS0108;CS8632;CS8600;CS8602;CS8603;CS8604;CS8618;CS8622"
 
-      - name: Package Payload into IPA
+      - name: Package Payload (Fallback if IPA generation skips)
         run: |
-          mkdir -p Payload
-          APP_PATH=$(find OpenUtauMobile/bin/Release/net9.0-ios -name "*.app" -type d | head -n 1)
-          if [ -n "$APP_PATH" ]; then
-            cp -r "$APP_PATH" Payload/
-            zip -r OpenUtauMobile-Release.ipa Payload
+          if [ ! -f *.ipa ]; then
+            mkdir -p Payload
+            APP_PATH=$(find OpenUtauMobile/bin/Release/net9.0-ios -name "*.app" -type d | head -n 1)
+            if [ -n "$APP_PATH" ]; then
+              cp -r "$APP_PATH" Payload/
+              zip -r OpenUtauMobile.ipa Payload
+            fi
           fi
 
       - name: Upload IPA Artifact
