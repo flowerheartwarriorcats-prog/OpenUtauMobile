@@ -29,10 +29,12 @@ jobs:
           dotnet publish OpenUtauMobile/OpenUtauMobile.csproj \
             -f net9.0-ios \
             -c Release \
+            -r ios-arm64 \
             -p:ArchiveOnBuild=true \
-            -p:RuntimeIdentifier=ios-arm64 \
-            -p:TargetFrameworks=net9.0-ios \
-            -p:BuildIpa=true
+            -p:BuildIpa=true \
+            -p:EnableCodeSigning=false \
+            -p:CodesignKey="" \
+            -p:ProvisioningProfile=""
 
       - name: Upload IPA Artifact
         uses: actions/upload-artifact@v4
