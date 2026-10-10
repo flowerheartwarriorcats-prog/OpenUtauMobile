@@ -8,10 +8,11 @@ jobs:
     runs-on: macos-14
 
     steps:
-      - name: Checkout Code
+      - name: Checkout Repository & Submodules
         uses: actions/checkout@v4
         with:
           submodules: recursive
+          fetch-depth: 0
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
@@ -19,27 +20,37 @@ jobs:
           dotnet-version: '9.0.x'
 
       - name: Install Workloads
-        run: dotnet workload install maui-ios android maui-android
+        run: |
+          dotnet workload install maui-ios ios
 
       - name: Restore Dependencies
-        run: dotnet restore -p:TargetFramework=net9.0-ios
+        run: |
+          dotnet restore OpenUtauMobile/OpenUtauMobile.csproj -f net9.0-ios
 
-      - name: Build and Package iOS IPA
+      - name: Publish & Create IPA
         run: |
           dotnet publish OpenUtauMobile/OpenUtauMobile.csproj \
             -f net9.0-ios \
             -c Release \
             -r ios-arm64 \
-            -p:MSBuildWarningsAsMessages=CS0108,CS8632,CS8600,CS8602,CS8603,CS8604,CS8618,CS8622 \
-            -p:TreatWarningsAsErrors=false \
-            -p:ArchiveOnBuild=true \
             -p:BuildIpa=true \
+            -p:ArchiveOnBuild=true \
             -p:EnableCodeSigning=false \
-            -p:CodesignKey="" \
-            -p:ProvisioningProfile=""
+            -p:TreatWarningsAsErrors=false \
+            -p:MSBuildWarningsAsMessages="CS0108;CS8632;CS8600;CS8602;CS8603;CS8604;CS8618;CS8622"
+
+      - name: Package Payload to IPA (Fallback Packaging)
+        run: |
+          mkdir -p Payload
+          APP_PATH=$(find OpenUtauMobile/bin/Release/net9.0-ios -name "*.app" -type d | head -n 1)
+          if [ -d "$APP_PATH" ]; then
+            cp -r "$APP_PATH" Payload/
+            zip -r OpenUtauMobile.ipa Payload
+          fi
 
       - name: Upload IPA Artifact
         uses: actions/upload-artifact@v4
         with:
           name: OpenUtauMobile-IPA
-          path: '**/*.ipa'
+          path: |
+            **/*.ipa
