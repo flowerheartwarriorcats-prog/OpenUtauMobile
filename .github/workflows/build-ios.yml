@@ -8,52 +8,47 @@ jobs:
     runs-on: macos-14
 
     steps:
-      - name: Checkout Repository & Submodules
+      - name: Checkout Code
         uses: actions/checkout@v4
         with:
           submodules: recursive
-          fetch-depth: 0
 
-      - name: Setup Bazel
-        uses: bazelbuild/setup-bazelisk@v3
-
-      - name: Setup .NET
+      - name: Setup .NET (No Cache)
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '9.0.x'
+          cache: false
 
-      - name: Install .NET Workloads
-        run: |
-          dotnet workload install maui-ios ios
+      - name: Install Workloads
+        run: dotnet workload install ios maui-ios
 
       - name: Restore Dependencies
-        run: |
-          dotnet restore OpenUtauMobile/OpenUtauMobile.csproj -f net9.0-ios
+        run: dotnet restore OpenUtauMobile/OpenUtauMobile.csproj -f net9.0-ios
 
-      - name: Build and Package iOS IPA
+      - name: Build and Publish IPA
         run: |
           dotnet publish OpenUtauMobile/OpenUtauMobile.csproj \
             -f net9.0-ios \
-            -c Release \
+            -c Debug \
             -r ios-arm64 \
-            -p:BuildIpa=true \
             -p:ArchiveOnBuild=true \
+            -p:BuildIpa=true \
             -p:EnableCodeSigning=false \
-            -p:TreatWarningsAsErrors=false \
-            -p:MSBuildWarningsAsMessages="CS0108;CS8632;CS8600;CS8602;CS8603;CS8604;CS8618;CS8622"
+            -p:TreatWarningsAsErrors=false
 
-      - name: Package Payload (Fallback if IPA generation is un-signed)
+      - name: Fallback Packaging (if .app built instead of .ipa)
         run: |
-          mkdir -p Payload
-          APP_PATH=$(find OpenUtauMobile/bin/Release/net9.0-ios -name "*.app" -type d | head -n 1)
-          if [ -d "$APP_PATH" ]; then
-            cp -r "$APP_PATH" Payload/
-            zip -r OpenUtauMobile.ipa Payload
+          if [ ! -f *.ipa ]; then
+            mkdir -p Payload
+            APP_PATH=$(find OpenUtauMobile/bin/Debug/net9.0-ios -name "*.app" -type d | head -n 1)
+            if [ -n "$APP_PATH" ]; then
+              cp -r "$APP_PATH" Payload/
+              zip -r OpenUtauMobile-Debug.ipa Payload
+            fi
           fi
 
       - name: Upload IPA Artifact
         uses: actions/upload-artifact@v4
         with:
           name: OpenUtauMobile-IPA
-          path: |
-            **/*.ipa
+          path: '**/*.ipa'
